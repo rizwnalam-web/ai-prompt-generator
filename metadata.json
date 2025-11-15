@@ -1,0 +1,5 @@
+{
+  "name": "AI Prompt Generator",
+  "description": "A tool to help users create effective, structured, and optimized prompts for AI models. It provides templates, guided inputs, and direct integration with Gemini to streamline the prompt engineering process.",
+  "requestFramePermissions": []
+}
