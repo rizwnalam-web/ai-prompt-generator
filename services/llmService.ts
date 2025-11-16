@@ -2,8 +2,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { ApiProviderConfig } from '../types';
 
 const generateWithGemini = async (prompt: string, config: ApiProviderConfig): Promise<string> => {
-    // FIX: Per @google/genai guidelines, the API key must be sourced from process.env.API_KEY.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: config.apiKey });
     try {
         const response = await ai.models.generateContent({
             model: config.model,
@@ -80,12 +79,14 @@ export const generateResponse = async (prompt: string, config: ApiProviderConfig
     }
 };
 
-export const generateSpeech = async (text: string, config: ApiProviderConfig): Promise<string> => {
+export const generateSpeech = async (text: string, config: ApiProviderConfig, signal?: AbortSignal): Promise<string> => {
     if (config.provider !== 'gemini') {
         throw new Error('Speech generation is only supported for the Google Gemini provider.');
     }
-    // FIX: Per @google/genai guidelines, the API key must be sourced from process.env.API_KEY.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    
+    if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
+
+    const ai = new GoogleGenAI({ apiKey: config.apiKey });
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
@@ -113,13 +114,14 @@ export const generateSpeech = async (text: string, config: ApiProviderConfig): P
     }
 };
 
-export const generateVideo = async (prompt: string, config: ApiProviderConfig, onStatusUpdate: (status: string) => void): Promise<string> => {
+export const generateVideo = async (prompt: string, config: ApiProviderConfig, onStatusUpdate: (status: string) => void, signal?: AbortSignal): Promise<string> => {
     if (config.provider !== 'gemini') {
         throw new Error('Video generation is only supported for the Google Gemini provider.');
     }
     
-    // FIX: Per @google/genai guidelines for Veo models, the API key must be sourced from process.env.API_KEY.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
+
+    const ai = new GoogleGenAI({ apiKey: config.apiKey });
     
     try {
         onStatusUpdate('Initializing video generation...');
@@ -135,6 +137,7 @@ export const generateVideo = async (prompt: string, config: ApiProviderConfig, o
 
         onStatusUpdate('Generation in progress... This may take a few minutes.');
         while (!operation.done) {
+            if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
             await new Promise(resolve => setTimeout(resolve, 10000));
             onStatusUpdate('Checking progress...');
             operation = await ai.operations.getVideosOperation({ operation: operation });
@@ -146,9 +149,8 @@ export const generateVideo = async (prompt: string, config: ApiProviderConfig, o
         }
         
         onStatusUpdate('Fetching video...');
-        // FIX: Per @google/genai guidelines, the API key for fetching the video must be from process.env.API_KEY.
-        const videoUrlWithKey = `${downloadLink}&key=${process.env.API_KEY!}`;
-        const response = await fetch(videoUrlWithKey);
+        const videoUrlWithKey = `${downloadLink}&key=${config.apiKey}`;
+        const response = await fetch(videoUrlWithKey, { signal });
 
         if (!response.ok) {
             throw new Error(`Failed to fetch video data. Status: ${response.statusText}`);
@@ -162,10 +164,13 @@ export const generateVideo = async (prompt: string, config: ApiProviderConfig, o
 
     } catch (error) {
         console.error("Error calling Video API:", error);
-        onStatusUpdate('An error occurred during video generation.');
-        if (error instanceof Error) {
-            throw new Error(`Video API Error: ${error.message}`);
+        if ((error as Error).name !== 'AbortError') {
+            onStatusUpdate('An error occurred during video generation.');
+            if (error instanceof Error) {
+                throw new Error(`Video API Error: ${error.message}`);
+            }
+            throw new Error("An unknown error occurred while contacting the Video API.");
         }
-        throw new Error("An unknown error occurred while contacting the Video API.");
+        throw error;
     }
 };

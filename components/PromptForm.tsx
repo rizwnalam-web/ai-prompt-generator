@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { PromptTemplate, PromptInputs, TemplateVariable } from '../types';
+import { PromptTemplate, PromptInputs } from '../types';
 import { TONE_OPTIONS, STYLE_OPTIONS, FORMAT_OPTIONS } from '../constants';
 
 interface PromptFormProps {
@@ -9,33 +9,10 @@ interface PromptFormProps {
     onTemplateChange: (id: string) => void;
     inputs: PromptInputs;
     onInputChange: (field: keyof PromptInputs, value: string) => void;
+    formErrors: Partial<Record<keyof PromptInputs, string>>;
 }
 
-const renderVariableInput = (variable: TemplateVariable, value: string, onChange: (value: string) => void) => {
-    const commonClasses = "w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition duration-200";
-    
-    if (variable.type === 'textarea') {
-        return <textarea
-            id={variable.key}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={variable.placeholder}
-            rows={4}
-            className={commonClasses}
-        />;
-    }
-    
-    return <input
-        type="text"
-        id={variable.key}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={variable.placeholder}
-        className={commonClasses}
-    />;
-};
-
-const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplates, selectedTemplate, onTemplateChange, inputs, onInputChange }) => {
+const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplates, selectedTemplate, onTemplateChange, inputs, onInputChange, formErrors }) => {
     const allTemplates = useMemo(() => [...defaultTemplates, ...customTemplates], [defaultTemplates, customTemplates]);
 
     const groupedTemplates = useMemo(() => {
@@ -77,20 +54,52 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
 
             <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 space-y-4">
                 <h2 className="text-xl font-semibold mb-4 text-gray-100">2. Fill in Details</h2>
-                {selectedTemplate.variables.map(variable => (
-                    <div key={variable.key}>
-                        <label htmlFor={variable.key} className="block text-sm font-medium mb-1 text-gray-300">{variable.label}</label>
-                        {renderVariableInput(variable, inputs[variable.key] || '', (value) => onInputChange(variable.key, value))}
-                    </div>
-                ))}
+                {selectedTemplate.variables.map(variable => {
+                    const hasError = !!formErrors[variable.key];
+                    const commonClasses = `w-full bg-gray-800 border rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition duration-200 ${hasError ? 'border-red-500' : 'border-gray-600'}`;
+                    return (
+                        <div key={variable.key}>
+                            <label htmlFor={variable.key} className="block text-sm font-medium mb-1 text-gray-300">{variable.label}*</label>
+                            {variable.type === 'textarea' ? (
+                                <textarea
+                                    id={variable.key}
+                                    value={inputs[variable.key] || ''}
+                                    onChange={(e) => onInputChange(variable.key, e.target.value)}
+                                    placeholder={variable.placeholder}
+                                    rows={4}
+                                    className={commonClasses}
+                                    aria-invalid={hasError}
+                                    aria-describedby={hasError ? `${variable.key}-error` : undefined}
+                                />
+                            ) : (
+                                <input
+                                    type="text"
+                                    id={variable.key}
+                                    value={inputs[variable.key] || ''}
+                                    onChange={(e) => onInputChange(variable.key, e.target.value)}
+                                    placeholder={variable.placeholder}
+                                    className={commonClasses}
+                                    aria-invalid={hasError}
+                                    aria-describedby={hasError ? `${variable.key}-error` : undefined}
+                                />
+                            )}
+                            {hasError && <p id={`${variable.key}-error`} className="text-red-500 text-xs mt-1">{formErrors[variable.key]}</p>}
+                        </div>
+                    );
+                })}
             </section>
 
             <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 space-y-4">
                 <h2 className="text-xl font-semibold mb-4 text-gray-100">3. Refine the Output</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label htmlFor="persona" className="block text-sm font-medium mb-1 text-gray-300">AI Persona</label>
-                        <input type="text" id="persona" value={inputs.persona} onChange={(e) => onInputChange('persona', e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary" />
+                        <label htmlFor="persona" className="block text-sm font-medium mb-1 text-gray-300">AI Persona*</label>
+                        <input type="text" id="persona" value={inputs.persona} onChange={(e) => onInputChange('persona', e.target.value)} 
+                         className={`w-full bg-gray-800 border rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition duration-200 ${formErrors.persona ? 'border-red-500' : 'border-gray-600'}`}
+                         aria-invalid={!!formErrors.persona}
+                         aria-describedby={formErrors.persona ? `persona-error` : undefined}
+                        />
+                         {formErrors.persona && <p id="persona-error" className="text-red-500 text-xs mt-1">{formErrors.persona}</p>}
                     </div>
                      <div>
                         <label htmlFor="audience" className="block text-sm font-medium mb-1 text-gray-300">Target Audience</label>
@@ -115,8 +124,13 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="length" className="block text-sm font-medium mb-1 text-gray-300">Length</label>
-                        <input type="text" id="length" value={inputs.length} onChange={(e) => onInputChange('length', e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary" />
+                        <label htmlFor="length" className="block text-sm font-medium mb-1 text-gray-300">Length*</label>
+                        <input type="text" id="length" value={inputs.length} onChange={(e) => onInputChange('length', e.target.value)}
+                         className={`w-full bg-gray-800 border rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition duration-200 ${formErrors.length ? 'border-red-500' : 'border-gray-600'}`}
+                         aria-invalid={!!formErrors.length}
+                         aria-describedby={formErrors.length ? `length-error` : undefined}
+                        />
+                        {formErrors.length && <p id="length-error" className="text-red-500 text-xs mt-1">{formErrors.length}</p>}
                     </div>
                 </div>
                  <div>

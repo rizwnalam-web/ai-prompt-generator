@@ -4,21 +4,30 @@ import TemplateCreatorForm from './TemplateCreatorForm';
 import TrashIcon from './icons/TrashIcon';
 import ArrowUpIcon from './icons/ArrowUpIcon';
 import ArrowDownIcon from './icons/ArrowDownIcon';
+import PencilIcon from './icons/PencilIcon';
 
 interface ManageTemplatesModalProps {
     isOpen: boolean;
     onClose: () => void;
     templates: PromptTemplate[];
-    onSave: (template: Omit<PromptTemplate, 'id' | 'createdAt'>) => void;
+    onSave: (template: Omit<PromptTemplate, 'createdAt'> & { id?: string }) => Promise<void>;
     onDelete: (templateId: string) => void;
 }
 
 const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onClose, templates, onSave, onDelete }) => {
     const [view, setView] = useState<'list' | 'create'>('list');
+    const [editingTemplate, setEditingTemplate] = useState<PromptTemplate | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState<'category' | 'name' | 'date'>('category');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
+    useEffect(() => {
+        if (isOpen) {
+            setView('list');
+            setEditingTemplate(null);
+        }
+    }, [isOpen]);
+    
     useEffect(() => {
         // Default to newest first for date sort, otherwise A-Z
         if (sortBy === 'date') {
@@ -52,7 +61,7 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
                     if (sortBy === 'name') {
                         compareResult = a.name.localeCompare(b.name);
                     } else if (sortBy === 'date') {
-                        compareResult = (a.createdAt || 0) - (b.createdAt || 0);
+                        compareResult = (b.createdAt || 0) - (a.createdAt || 0); // Note: swapped for desc default
                     }
                     return sortOrder === 'asc' ? compareResult : -compareResult;
                 });
@@ -80,9 +89,20 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
         return categories;
     }, [groupedTemplates, sortBy, sortOrder]);
 
-    const handleSaveAndSwitchView = (template: Omit<PromptTemplate, 'id' | 'createdAt'>) => {
-        onSave(template);
+    const handleSaveAndSwitchView = async (template: Omit<PromptTemplate, 'createdAt'> & { id?: string }) => {
+        await onSave(template);
         setView('list');
+        setEditingTemplate(null);
+    };
+    
+    const handleEdit = (template: PromptTemplate) => {
+        setEditingTemplate(template);
+        setView('create');
+    };
+    
+    const handleCancel = () => {
+        setView('list');
+        setEditingTemplate(null);
     };
 
     if (!isOpen) return null;
@@ -91,7 +111,7 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
         <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <div className="p-6 border-b border-gray-700">
-                    <h2 className="text-2xl font-bold">{view === 'list' ? 'Manage Your Templates' : 'Create a New Template'}</h2>
+                    <h2 className="text-2xl font-bold">{view === 'list' ? 'Manage Your Templates' : editingTemplate ? 'Edit Template' : 'Create a New Template'}</h2>
                 </div>
                 
                 {view === 'list' ? (
@@ -127,7 +147,7 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
                         </div>
                          <div className="flex justify-end mb-4">
                              <button
-                                onClick={() => setView('create')}
+                                onClick={() => { setView('create'); setEditingTemplate(null); }}
                                 className="bg-brand-primary hover:bg-brand-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors whitespace-nowrap"
                             >
                                 Create New
@@ -145,9 +165,14 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
                                                     <h4 className="font-semibold">{template.name}</h4>
                                                     <p className="text-sm text-gray-400">{template.description}</p>
                                                 </div>
-                                                <button onClick={() => onDelete(template.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-full transition-colors">
-                                                    <TrashIcon className="h-5 w-5" />
-                                                </button>
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => handleEdit(template)} className="text-gray-400 hover:text-brand-primary p-2 rounded-full transition-colors" aria-label={`Edit ${template.name}`}>
+                                                        <PencilIcon className="h-5 w-5" />
+                                                    </button>
+                                                    <button onClick={() => onDelete(template.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-full transition-colors" aria-label={`Delete ${template.name}`}>
+                                                        <TrashIcon className="h-5 w-5" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -160,7 +185,7 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
                         </div>
                     </div>
                 ) : (
-                    <TemplateCreatorForm onSave={handleSaveAndSwitchView} onCancel={() => setView('list')} />
+                    <TemplateCreatorForm onSave={handleSaveAndSwitchView} onCancel={handleCancel} existingTemplate={editingTemplate} />
                 )}
                 
                 <div className="p-4 border-t border-gray-700 text-right">

@@ -28,6 +28,8 @@ const App: React.FC = () => {
     const [aiResponse, setAiResponse] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [formErrors, setFormErrors] = useState<Partial<Record<keyof PromptInputs, string>>>({});
+
 
     // Multimodal state
     const [audioData, setAudioData] = useState<string | null>(null);
@@ -35,6 +37,8 @@ const App: React.FC = () => {
     const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
     const [isGeneratingVideo, setIsGeneratingVideo] = useState<boolean>(false);
     const [videoGenerationStatus, setVideoGenerationStatus] = useState<string>('');
+    const [generationAbortController, setGenerationAbortController] = useState<AbortController | null>(null);
+
 
     const [customTemplates, setCustomTemplates] = useState<PromptTemplate[]>([]);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -76,9 +80,31 @@ const App: React.FC = () => {
 
     const handleInputChange = useCallback((field: keyof PromptInputs, value: string) => {
         setInputs(prev => ({ ...prev, [field]: value }));
-    }, []);
+        if (formErrors[field]) {
+            setFormErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[field];
+                return newErrors;
+            });
+        }
+    }, [formErrors]);
 
     const handleGenerate = async () => {
+        // --- Form Validation ---
+        const errors: Partial<Record<keyof PromptInputs, string>> = {};
+        selectedTemplate.variables.forEach(variable => {
+            if (!inputs[variable.key] || inputs[variable.key].trim() === '') {
+                errors[variable.key] = `${variable.label} is required.`;
+            }
+        });
+        if (!inputs.persona.trim()) errors.persona = 'AI Persona is required.';
+        if (!inputs.length.trim()) errors.length = 'Length is required.';
+
+        setFormErrors(errors);
+        if (Object.keys(errors).length > 0) {
+            return; // Stop if there are validation errors
+        }
+
         if (!activeConfig) {
             setError("No active API provider selected.");
             setIsProviderModalOpen(true);
@@ -107,15 +133,22 @@ const App: React.FC = () => {
 
     const handleGenerateAudio = async () => {
         if (!aiResponse || !activeConfig) return;
+
+        const controller = new AbortController();
+        setGenerationAbortController(controller);
         setIsGeneratingAudio(true);
         setError(null);
+
         try {
-            const audioB64 = await generateSpeech(aiResponse, activeConfig);
+            const audioB64 = await generateSpeech(aiResponse, activeConfig, controller.signal);
             setAudioData(audioB64);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate audio.');
+            if ((err as Error).name !== 'AbortError') {
+                 setError(err instanceof Error ? err.message : 'Failed to generate audio.');
+            }
         } finally {
             setIsGeneratingAudio(false);
+            setGenerationAbortController(null);
         }
     };
 
@@ -127,6 +160,9 @@ const App: React.FC = () => {
             return;
         }
         
+        const controller = new AbortController();
+        setGenerationAbortController(controller);
+
         try {
             const hasKey = await window.aistudio.hasSelectedApiKey();
             if (!hasKey) {
@@ -138,16 +174,33 @@ const App: React.FC = () => {
             setError(null);
             setVideoUrl(null);
 
-            const url = await generateVideo(aiResponse, activeConfig, setVideoGenerationStatus);
+            const url = await generateVideo(aiResponse, activeConfig, setVideoGenerationStatus, controller.signal);
             setVideoUrl(url);
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to generate video.';
-            setError(errorMessage);
-            if (errorMessage.includes("Requested entity was not found")) {
-                await window.aistudio.openSelectKey();
+             if ((err as Error).name !== 'AbortError') {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to generate video.';
+                setError(errorMessage);
+                if (errorMessage.includes("Requested entity was not found")) {
+                    await window.aistudio.openSelectKey();
+                }
+            } else {
+                setVideoGenerationStatus("Generation cancelled by user.");
             }
         } finally {
             setIsGeneratingVideo(false);
+            setGenerationAbortController(null);
+        }
+    };
+
+    const handleStopGeneration = () => {
+        generationAbortController?.abort();
+        // Reset states immediately for UI responsiveness
+        if (isGeneratingAudio) {
+            setIsGeneratingAudio(false);
+        }
+        if (isGeneratingVideo) {
+            setIsGeneratingVideo(false);
+            setVideoGenerationStatus('Stopping generation...');
         }
     };
     
@@ -167,18 +220,33 @@ const App: React.FC = () => {
         initialInputs[v.key] = '';
       });
       setInputs(initialInputs);
+      setFormErrors({}); // Clear errors when template changes
 
     }, [selectedTemplate]);
 
-    const handleSaveTemplate = (newTemplateData: Omit<PromptTemplate, 'id' | 'createdAt'>) => {
-        const newTemplate: PromptTemplate = {
-            ...newTemplateData,
-            id: `custom-${Date.now()}`,
-            createdAt: Date.now(),
-        };
-        const updatedTemplates = [...customTemplates, newTemplate];
-        setCustomTemplates(updatedTemplates);
-        saveCustomTemplates(updatedTemplates);
+    const handleSaveTemplate = (templateData: Omit<PromptTemplate, 'createdAt'> & { id?: string }): Promise<void> => {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                let updatedTemplates;
+                if (templateData.id) {
+                    // Update existing template
+                    updatedTemplates = customTemplates.map(t =>
+                        t.id === templateData.id ? { ...t, ...templateData } : t
+                    );
+                } else {
+                    // Create new template
+                    const newTemplate: PromptTemplate = {
+                        ...templateData,
+                        id: `custom-${Date.now()}`,
+                        createdAt: Date.now(),
+                    };
+                    updatedTemplates = [...customTemplates, newTemplate];
+                }
+                setCustomTemplates(updatedTemplates);
+                saveCustomTemplates(updatedTemplates);
+                resolve();
+            }, 500);
+        });
     };
 
     const handleDeleteTemplate = (templateId: string) => {
@@ -244,6 +312,7 @@ const App: React.FC = () => {
                             onTemplateChange={setSelectedTemplateId}
                             inputs={inputs}
                             onInputChange={handleInputChange}
+                            formErrors={formErrors}
                         />
                     </div>
 
@@ -263,11 +332,13 @@ const App: React.FC = () => {
                             isStoryTemplate={selectedTemplate.id === 'story-generator'}
                             onGenerateAudio={handleGenerateAudio}
                             onGenerateVideo={handleGenerateVideo}
+                            onStopGeneration={handleStopGeneration}
                             audioData={audioData}
                             videoUrl={videoUrl}
                             isGeneratingAudio={isGeneratingAudio}
                             isGeneratingVideo={isGeneratingVideo}
                             videoGenerationStatus={videoGenerationStatus}
+                            activeConfig={activeConfig}
                         />
                     </div>
                 </div>

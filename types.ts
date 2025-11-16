@@ -37,13 +37,12 @@ export interface ApiProviderConfig {
   model: string;
 }
 
-// FIX: Define a named interface for the aistudio object on the window to prevent type conflicts with other global declarations.
-export interface AIStudio {
-  hasSelectedApiKey: () => Promise<boolean>;
-  openSelectKey: () => Promise<void>;
-}
-
 declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
+
   interface Window {
     aistudio?: AIStudio;
   }
