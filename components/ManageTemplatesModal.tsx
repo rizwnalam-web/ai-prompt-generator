@@ -1,10 +1,14 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PromptTemplate } from '../types';
 import TemplateCreatorForm from './TemplateCreatorForm';
 import TrashIcon from './icons/TrashIcon';
 import ArrowUpIcon from './icons/ArrowUpIcon';
 import ArrowDownIcon from './icons/ArrowDownIcon';
 import PencilIcon from './icons/PencilIcon';
+import DownloadIcon from './icons/DownloadIcon';
+import ArrowUpTrayIcon from './icons/ArrowUpTrayIcon';
+import { useAuth } from '../context/AuthContext';
+import { formatTimestamp } from '../utils/dateUtils';
 
 interface ManageTemplatesModalProps {
     isOpen: boolean;
@@ -12,14 +16,18 @@ interface ManageTemplatesModalProps {
     templates: PromptTemplate[];
     onSave: (template: Omit<PromptTemplate, 'createdAt'> & { id?: string }) => Promise<void>;
     onDelete: (templateId: string) => void;
+    onImport: (templates: Omit<PromptTemplate, 'id'|'createdAt'>[]) => void;
+    onRequiresAuth: () => void;
 }
 
-const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onClose, templates, onSave, onDelete }) => {
+const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onClose, templates, onSave, onDelete, onImport, onRequiresAuth }) => {
+    const { currentUser } = useAuth();
     const [view, setView] = useState<'list' | 'create'>('list');
     const [editingTemplate, setEditingTemplate] = useState<PromptTemplate | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState<'category' | 'name' | 'date'>('category');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -36,6 +44,15 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
             setSortOrder('asc');
         }
     }, [sortBy]);
+    
+    const handleCreateClick = () => {
+        if (!currentUser) {
+            onRequiresAuth();
+        } else {
+            setView('create');
+            setEditingTemplate(null);
+        }
+    };
 
     const filteredTemplates = useMemo(() => {
         return templates.filter(t => 
@@ -105,6 +122,73 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
         setEditingTemplate(null);
     };
 
+    const isValidVariable = (v: any) => {
+        return typeof v === 'object' && v !== null && 'key' in v && typeof v.key === 'string' && 'label' in v && typeof v.label === 'string' && 'type' in v && (v.type === 'input' || v.type === 'textarea');
+    };
+
+    const isValidTemplate = (item: any): item is Omit<PromptTemplate, 'id' | 'createdAt'> => {
+        return (
+            typeof item === 'object' &&
+            item !== null &&
+            'name' in item && typeof item.name === 'string' &&
+            'basePrompt' in item && typeof item.basePrompt === 'string' &&
+            'variables' in item && Array.isArray(item.variables) &&
+            item.variables.every(isValidVariable)
+        );
+    };
+
+    const handleExport = () => {
+        if (templates.length === 0) {
+            alert("There are no custom templates to export.");
+            return;
+        }
+        const templatesToExport = templates.map(({ id, createdAt, ...rest }) => rest);
+        const dataStr = JSON.stringify(templatesToExport, null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement("a");
+        link.download = "prompt-templates.json";
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportClick = () => {
+        if (!currentUser) {
+            onRequiresAuth();
+            return;
+        }
+        fileInputRef.current?.click();
+    };
+
+    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const content = event.target?.result;
+                if (typeof content !== 'string') throw new Error("File content is not readable.");
+                const importedData = JSON.parse(content);
+                if (!Array.isArray(importedData) || !importedData.every(isValidTemplate)) {
+                     throw new Error("Invalid template structure in JSON file. Ensure it's an array of templates with name, basePrompt, and variables properties.");
+                }
+                onImport(importedData);
+                alert(`${importedData.length} template(s) imported successfully!`);
+            } catch (error) {
+                console.error("Failed to import templates:", error);
+                alert(`Error importing file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+                if (e.target) e.target.value = '';
+            }
+        };
+        reader.onerror = () => alert("Error reading the file.");
+        reader.readAsText(file);
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -145,9 +229,24 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
                                 </button>
                             </div>
                         </div>
-                         <div className="flex justify-end mb-4">
+                         <div className="flex justify-end mb-4 gap-2 flex-wrap">
+                             <input type="file" ref={fileInputRef} onChange={handleFileImport} className="hidden" accept=".json" />
+                             <button 
+                                onClick={handleImportClick}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-sm font-medium transition-colors"
+                             >
+                                <DownloadIcon className="h-5 w-5" />
+                                Import
+                             </button>
+                             <button 
+                                onClick={handleExport}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-sm font-medium transition-colors"
+                             >
+                                <ArrowUpTrayIcon className="h-5 w-5" />
+                                Export
+                             </button>
                              <button
-                                onClick={() => { setView('create'); setEditingTemplate(null); }}
+                                onClick={handleCreateClick}
                                 className="bg-brand-primary hover:bg-brand-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors whitespace-nowrap"
                             >
                                 Create New
@@ -162,7 +261,14 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ isOpen, onC
                                         {groupedTemplates[category].map(template => (
                                             <div key={template.id} className="bg-gray-900/50 p-4 rounded-md flex justify-between items-center">
                                                 <div>
-                                                    <h4 className="font-semibold">{template.name}</h4>
+                                                    <div className="flex items-center gap-3">
+                                                        <h4 className="font-semibold">{template.name}</h4>
+                                                        {sortBy === 'date' && template.createdAt && (
+                                                            <span className="text-xs text-gray-500 font-mono">
+                                                                {formatTimestamp(template.createdAt)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-sm text-gray-400">{template.description}</p>
                                                 </div>
                                                 <div className="flex items-center gap-1">

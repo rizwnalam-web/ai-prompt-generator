@@ -58,6 +58,20 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
         category: 'Development',
     },
      {
+        id: 'software-requirements',
+        name: 'Software Requirements Spec',
+        description: 'Generate a detailed software requirements specification and development steps.',
+        basePrompt: 'Generate a detailed software requirements specification for a new project called \'[PROJECT_CONCEPT]\'. The document should be structured for a development team.\n\nKey Goals:\n[KEY_GOALS]\n\nTarget Audience/Users:\n[TARGET_USERS]\n\nCore Features to include:\n[CORE_FEATURES]\n\nPreferred Technology Stack (if any):\n[TECH_STACK]\n\nThe output should include sections for: User Stories, Functional Requirements, Non-Functional Requirements (like performance, security, scalability), and suggested development steps or milestones.',
+        variables: [
+            { key: 'PROJECT_CONCEPT', label: 'Project Name / Concept', placeholder: 'e.g., A mobile app for local event discovery', type: 'input' },
+            { key: 'KEY_GOALS', label: 'Key Project Goals', placeholder: 'e.g., Increase user engagement, streamline ticket booking', type: 'textarea' },
+            { key: 'TARGET_USERS', label: 'Target Users', placeholder: 'e.g., Young adults aged 18-30, tourists', type: 'textarea' },
+            { key: 'CORE_FEATURES', label: 'Core Features', placeholder: 'e.g., - Map view of events\n- User profiles and saved events\n- In-app ticket purchasing', type: 'textarea' },
+            { key: 'TECH_STACK', label: 'Preferred Technology Stack (Optional)', placeholder: 'e.g., React Native, Firebase, Stripe API', type: 'input' },
+        ],
+        category: 'Development',
+    },
+    {
         id: 'story-generator',
         name: 'Story Generator',
         description: 'Generate a short story script, then create voice and video.',

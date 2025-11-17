@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { PromptTemplate, PromptInputs } from '../types';
 import { TONE_OPTIONS, STYLE_OPTIONS, FORMAT_OPTIONS } from '../constants';
+import Tooltip from './Tooltip';
 
 interface PromptFormProps {
     defaultTemplates: PromptTemplate[];
@@ -34,7 +35,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
 
     return (
         <div className="space-y-6">
-            <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
+            <section data-tour-id="template-selection" className="bg-gray-800/50 p-6 rounded-lg border border-gray-700">
                 <h2 className="text-xl font-semibold mb-4 text-gray-100">1. Choose a Template</h2>
                 <select
                     value={selectedTemplate.id}
@@ -52,7 +53,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
                 <p className="text-sm text-gray-400 mt-2">{selectedTemplate.description}</p>
             </section>
 
-            <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 space-y-4">
+            <section data-tour-id="details-form" className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 space-y-4">
                 <h2 className="text-xl font-semibold mb-4 text-gray-100">2. Fill in Details</h2>
                 {selectedTemplate.variables.map(variable => {
                     const hasError = !!formErrors[variable.key];
@@ -89,11 +90,14 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
                 })}
             </section>
 
-            <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 space-y-4">
+            <section data-tour-id="refine-form" className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 space-y-4">
                 <h2 className="text-xl font-semibold mb-4 text-gray-100">3. Refine the Output</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label htmlFor="persona" className="block text-sm font-medium mb-1 text-gray-300">AI Persona*</label>
+                        <label htmlFor="persona" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                            AI Persona*
+                            <Tooltip text="Define the role or character the AI should adopt. For example, 'a witty historian', 'a formal business analyst', or 'a friendly children's storyteller'." />
+                        </label>
                         <input type="text" id="persona" value={inputs.persona} onChange={(e) => onInputChange('persona', e.target.value)} 
                          className={`w-full bg-gray-800 border rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition duration-200 ${formErrors.persona ? 'border-red-500' : 'border-gray-600'}`}
                          aria-invalid={!!formErrors.persona}
@@ -102,29 +106,44 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
                          {formErrors.persona && <p id="persona-error" className="text-red-500 text-xs mt-1">{formErrors.persona}</p>}
                     </div>
                      <div>
-                        <label htmlFor="audience" className="block text-sm font-medium mb-1 text-gray-300">Target Audience</label>
+                        <label htmlFor="audience" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                            Target Audience
+                             <Tooltip text="Who is this response for? Specifying the audience (e.g., 'beginner programmers', 'marketing executives') helps the AI tailor the language and complexity." />
+                        </label>
                         <input type="text" id="audience" value={inputs.audience} onChange={(e) => onInputChange('audience', e.target.value)} placeholder="e.g., beginner developers" className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary" />
                     </div>
                     <div>
-                        <label htmlFor="tone" className="block text-sm font-medium mb-1 text-gray-300">Tone</label>
+                        <label htmlFor="tone" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                            Tone
+                             <Tooltip text="Choose the emotional or attitudinal quality of the response. This sets the overall feeling of the text." />
+                        </label>
                         <select id="tone" value={inputs.tone} onChange={(e) => onInputChange('tone', e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary">
                             {TONE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="style" className="block text-sm font-medium mb-1 text-gray-300">Style</label>
+                        <label htmlFor="style" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                            Style
+                            <Tooltip text="Select the literary or writing style. This influences the structure, vocabulary, and rhythm of the response." />
+                        </label>
                         <select id="style" value={inputs.style} onChange={(e) => onInputChange('style', e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary">
                             {STYLE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="format" className="block text-sm font-medium mb-1 text-gray-300">Format</label>
+                        <label htmlFor="format" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                            Format
+                            <Tooltip text="Specify the desired output structure. 'Markdown' is great for structured text with headings, while 'JSON' is for data." />
+                        </label>
                          <select id="format" value={inputs.format} onChange={(e) => onInputChange('format', e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary">
                             {FORMAT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="length" className="block text-sm font-medium mb-1 text-gray-300">Length*</label>
+                        <label htmlFor="length" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                            Length*
+                            <Tooltip text="Guide the desired length of the response. Be descriptive, like 'a short paragraph', 'about 500 words', or 'three key bullet points'." />
+                        </label>
                         <input type="text" id="length" value={inputs.length} onChange={(e) => onInputChange('length', e.target.value)}
                          className={`w-full bg-gray-800 border rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition duration-200 ${formErrors.length ? 'border-red-500' : 'border-gray-600'}`}
                          aria-invalid={!!formErrors.length}
@@ -134,11 +153,17 @@ const PromptForm: React.FC<PromptFormProps> = ({ defaultTemplates, customTemplat
                     </div>
                 </div>
                  <div>
-                    <label htmlFor="context" className="block text-sm font-medium mb-1 text-gray-300">Context / Background Info</label>
+                    <label htmlFor="context" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                        Context / Background Info
+                        <Tooltip text="Provide any relevant background information, data, or prior text the AI needs to understand the request fully." />
+                    </label>
                     <textarea id="context" value={inputs.context} onChange={(e) => onInputChange('context', e.target.value)} rows={5} placeholder="Provide any relevant background information here..." className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"></textarea>
                 </div>
                 <div>
-                    <label htmlFor="negativeConstraints" className="block text-sm font-medium mb-1 text-gray-300">What to Avoid</label>
+                    <label htmlFor="negativeConstraints" className="flex items-center text-sm font-medium mb-1 text-gray-300">
+                        What to Avoid
+                        <Tooltip text="List specific things the AI should not do or include. For example, 'avoid using technical jargon' or 'do not mention competitors by name'." />
+                    </label>
                     <textarea id="negativeConstraints" value={inputs.negativeConstraints} onChange={(e) => onInputChange('negativeConstraints', e.target.value)} rows={3} placeholder="e.g., using technical jargon, mentioning specific competitors" className="w-full bg-gray-800 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"></textarea>
                 </div>
             </section>

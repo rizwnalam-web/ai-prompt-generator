@@ -114,14 +114,22 @@ export const generateSpeech = async (text: string, config: ApiProviderConfig, si
     }
 };
 
-export const generateVideo = async (prompt: string, config: ApiProviderConfig, onStatusUpdate: (status: string) => void, signal?: AbortSignal): Promise<string> => {
+export const generateVideo = async (
+    prompt: string,
+    config: ApiProviderConfig,
+    onStatusUpdate: (status: string) => void,
+    signal?: AbortSignal,
+    aspectRatio: string = '16:9',
+    resolution: string = '720p',
+): Promise<string> => {
     if (config.provider !== 'gemini') {
         throw new Error('Video generation is only supported for the Google Gemini provider.');
     }
     
     if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
 
-    const ai = new GoogleGenAI({ apiKey: config.apiKey });
+    // Per Veo documentation, a new client must be created to use the key from the selection dialog.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
         onStatusUpdate('Initializing video generation...');
@@ -130,8 +138,8 @@ export const generateVideo = async (prompt: string, config: ApiProviderConfig, o
             prompt: `An animated, whimsical short film based on this story: ${prompt}`,
             config: {
                 numberOfVideos: 1,
-                resolution: '720p',
-                aspectRatio: '16:9'
+                resolution: resolution as ('720p' | '1080p'),
+                aspectRatio: aspectRatio as ('16:9' | '9:16'),
             }
         });
 
@@ -149,7 +157,8 @@ export const generateVideo = async (prompt: string, config: ApiProviderConfig, o
         }
         
         onStatusUpdate('Fetching video...');
-        const videoUrlWithKey = `${downloadLink}&key=${config.apiKey}`;
+        // The API key for fetching the video must also come from the selection dialog.
+        const videoUrlWithKey = `${downloadLink}&key=${process.env.API_KEY}`;
         const response = await fetch(videoUrlWithKey, { signal });
 
         if (!response.ok) {
@@ -167,6 +176,9 @@ export const generateVideo = async (prompt: string, config: ApiProviderConfig, o
         if ((error as Error).name !== 'AbortError') {
             onStatusUpdate('An error occurred during video generation.');
             if (error instanceof Error) {
+                 if (error.message.includes("Requested entity was not found")) {
+                     throw new Error("Video API Error: API Key is invalid or not found. Please try re-selecting your key.");
+                }
                 throw new Error(`Video API Error: ${error.message}`);
             }
             throw new Error("An unknown error occurred while contacting the Video API.");

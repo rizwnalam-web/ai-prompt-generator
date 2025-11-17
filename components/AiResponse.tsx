@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { playAudio, createWavBlob } from '../utils/audioUtils';
 import SpeakerWaveIcon from './icons/SpeakerWaveIcon';
 import VideoCameraIcon from './icons/VideoCameraIcon';
@@ -6,6 +6,13 @@ import PlayIcon from './icons/PlayIcon';
 import StopIcon from './icons/StopIcon';
 import DownloadIcon from './icons/DownloadIcon';
 import { ApiProviderConfig } from '../types';
+import TwitterIcon from './icons/TwitterIcon';
+import LinkedInIcon from './icons/LinkedInIcon';
+import ClipboardIcon from './icons/ClipboardIcon';
+import FacebookIcon from './icons/FacebookIcon';
+import ThreadsIcon from './icons/ThreadsIcon';
+import ThumbUpIcon from './icons/ThumbUpIcon';
+import ThumbDownIcon from './icons/ThumbDownIcon';
 
 interface AiResponseProps {
     response: string;
@@ -13,7 +20,7 @@ interface AiResponseProps {
     error: string | null;
     isStoryTemplate: boolean;
     onGenerateAudio: () => void;
-    onGenerateVideo: () => void;
+    onGenerateVideo: (aspectRatio: string, resolution: string) => void;
     onStopGeneration: () => void;
     audioData: string | null;
     videoUrl: string | null;
@@ -21,6 +28,8 @@ interface AiResponseProps {
     isGeneratingVideo: boolean;
     videoGenerationStatus: string;
     activeConfig: ApiProviderConfig | null;
+    feedback: 'up' | 'down' | null;
+    onFeedback: (feedback: 'up' | 'down') => void;
 }
 
 const AiResponse: React.FC<AiResponseProps> = ({
@@ -36,9 +45,48 @@ const AiResponse: React.FC<AiResponseProps> = ({
     isGeneratingAudio,
     isGeneratingVideo,
     videoGenerationStatus,
-    activeConfig
+    activeConfig,
+    feedback,
+    onFeedback,
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [socialsCopied, setSocialsCopied] = useState(false);
+    const [aspectRatio, setAspectRatio] = useState('16:9');
+    const [resolution, setResolution] = useState('720p');
+    const [videoProgress, setVideoProgress] = useState(0);
+
+    useEffect(() => {
+        if (!isGeneratingVideo) {
+            if (!videoUrl) {
+                setVideoProgress(0);
+            }
+            return;
+        }
+
+        switch (videoGenerationStatus) {
+            case 'Starting...':
+                setVideoProgress(10);
+                break;
+            case 'Initializing video generation...':
+                setVideoProgress(25);
+                break;
+            case 'Generation in progress... This may take a few minutes.':
+                setVideoProgress(50);
+                break;
+            case 'Checking progress...':
+                setVideoProgress(75);
+                break;
+            case 'Fetching video...':
+                setVideoProgress(90);
+                break;
+            case 'Video ready!':
+                setVideoProgress(100);
+                break;
+            default:
+                 if (videoProgress < 20) setVideoProgress(20);
+                break;
+        }
+    }, [videoGenerationStatus, isGeneratingVideo, videoUrl]);
 
     const handlePlayAudio = async () => {
         if (!audioData) return;
@@ -68,12 +116,40 @@ const AiResponse: React.FC<AiResponseProps> = ({
             console.error("Failed to create WAV for download", e);
         }
     };
+    
+    const handleShare = (platform: 'twitter' | 'linkedin' | 'threads' | 'facebook') => {
+        const text = encodeURIComponent(response);
+        let url = '';
+        if (platform === 'twitter') {
+            url = `https://twitter.com/intent/tweet?text=${text}`;
+        } else if (platform === 'linkedin') {
+            url = `https://www.linkedin.com/feed/?shareActive=true&text=${text}`;
+        } else if (platform === 'threads') {
+            url = `https://www.threads.net/intent/post?text=${text}`;
+        } else if (platform === 'facebook') {
+            const currentUrl = encodeURIComponent(window.location.href);
+            url = `https://www.facebook.com/sharer/sharer.php?u=${currentUrl}&quote=${text}`;
+        }
+
+        if (url) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+    };
+
+    const handleCopyToSocials = () => {
+        if (!response) return;
+        navigator.clipboard.writeText(response);
+        setSocialsCopied(true);
+        setTimeout(() => setSocialsCopied(false), 2000);
+    };
 
     const commonButtonClasses = "flex items-center justify-center gap-2 font-bold py-2 px-4 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm";
     const primaryButtonClasses = `bg-brand-primary hover:bg-brand-secondary text-white ${commonButtonClasses}`;
     const secondaryButtonClasses = `bg-gray-600 hover:bg-gray-500 text-white ${commonButtonClasses}`;
+    const iconButtonClasses = "bg-gray-600 hover:bg-gray-500 text-white flex items-center justify-center font-bold p-2.5 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
 
     const canGenerateAudio = !!response && !isLoading && activeConfig?.provider === 'gemini';
+    const canShare = !!response && !isLoading && !error;
 
     return (
         <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 flex flex-col h-full min-h-[200px]">
@@ -106,87 +182,188 @@ const AiResponse: React.FC<AiResponseProps> = ({
                 )}
             </div>
 
-            {canGenerateAudio && (
-                <div className="mt-4 pt-4 border-t border-gray-700 space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-200">
-                        {isStoryTemplate ? 'Creative Suite' : 'Tools'}
-                    </h3>
-                    
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={onGenerateAudio}
-                                    disabled={isGeneratingAudio || !!audioData}
-                                    className={`${primaryButtonClasses} w-full`}
-                                >
-                                    <SpeakerWaveIcon className="h-5 w-5" />
-                                    {isGeneratingAudio ? 'Generating...' : audioData ? 'Voice Generated' : 'Generate Narration'}
-                                </button>
-                                {isGeneratingAudio && (
-                                    <button onClick={onStopGeneration} title="Stop Generation" className={secondaryButtonClasses}>
-                                        <StopIcon className="h-5 w-5" />
+            {(canShare || canGenerateAudio) && (
+                 <div className="mt-4 pt-4 border-t border-gray-700 space-y-4">
+                     {canShare && (
+                         <div className="flex justify-between items-start gap-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-200 mb-3">Share</h3>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <button
+                                        onClick={() => handleShare('twitter')}
+                                        className={iconButtonClasses}
+                                        aria-label="Share on X"
+                                        title="Share on X"
+                                    >
+                                        <TwitterIcon className="h-5 w-5" />
                                     </button>
-                                )}
-                            </div>
-                             {audioData && !isGeneratingAudio && (
-                                <div className="flex items-center gap-2">
-                                    <button onClick={handlePlayAudio} disabled={isPlaying} className={`${secondaryButtonClasses} w-full`}>
-                                        <PlayIcon className="h-5 w-5" />
-                                        {isPlaying ? 'Playing...' : 'Play Narration'}
+                                    <button
+                                        onClick={() => handleShare('linkedin')}
+                                        className={iconButtonClasses}
+                                        aria-label="Share on LinkedIn"
+                                        title="Share on LinkedIn"
+                                    >
+                                        <LinkedInIcon className="h-5 w-5" />
                                     </button>
-                                    <button onClick={handleDownloadAudio} title="Download Audio" className={secondaryButtonClasses}>
-                                        <DownloadIcon className="h-5 w-5" />
+                                    <button
+                                        onClick={() => handleShare('threads')}
+                                        className={iconButtonClasses}
+                                        aria-label="Share on Threads"
+                                        title="Share on Threads"
+                                    >
+                                        <ThreadsIcon className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleShare('facebook')}
+                                        className={iconButtonClasses}
+                                        aria-label="Share on Facebook"
+                                        title="Share on Facebook"
+                                    >
+                                        <FacebookIcon className="h-5 w-5" />
+                                    </button>
+                                    <div className="h-6 w-px bg-gray-600"></div>
+                                    <button
+                                        onClick={handleCopyToSocials}
+                                        className={secondaryButtonClasses}
+                                    >
+                                        <ClipboardIcon className="h-5 w-5" />
+                                        <span>{socialsCopied ? 'Copied!' : 'Copy Text'}</span>
                                     </button>
                                 </div>
-                            )}
-                        </div>
-                         {isStoryTemplate && (
-                            <div className="flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-200 mb-3">Feedback</h3>
+                                 <div className="flex items-center gap-3">
                                     <button
-                                        onClick={onGenerateVideo}
-                                        disabled={isGeneratingVideo || !!videoUrl || !audioData}
-                                        title={!audioData ? "Generate voice first" : "Generate video"}
-                                        className={`${primaryButtonClasses} w-full ${!audioData ? 'bg-gray-600 hover:bg-gray-600 cursor-not-allowed' : ''}`}
+                                        onClick={() => onFeedback('up')}
+                                        className={`p-2 rounded-full transition-colors ${feedback === 'up' ? 'bg-green-500/20 text-green-400' : 'bg-gray-600 hover:bg-gray-500 text-gray-300'}`}
+                                        aria-label="Good response"
+                                        title="Good response"
                                     >
-                                        <VideoCameraIcon className="h-5 w-5" />
-                                        {isGeneratingVideo ? 'Generating...' : videoUrl ? 'Video Generated' : 'Generate Video'}
+                                        <ThumbUpIcon className="h-5 w-5" />
                                     </button>
-                                    {isGeneratingVideo && (
-                                        <button onClick={onStopGeneration} title="Stop Generation" className={secondaryButtonClasses}>
-                                            <StopIcon className="h-5 w-5" />
+                                     <button
+                                        onClick={() => onFeedback('down')}
+                                        className={`p-2 rounded-full transition-colors ${feedback === 'down' ? 'bg-red-500/20 text-red-400' : 'bg-gray-600 hover:bg-gray-500 text-gray-300'}`}
+                                        aria-label="Bad response"
+                                        title="Bad response"
+                                    >
+                                        <ThumbDownIcon className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            </div>
+                         </div>
+                    )}
+                    {canGenerateAudio && (
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-200">
+                                {isStoryTemplate ? 'Creative Suite' : 'Tools'}
+                            </h3>
+                            
+                            <div className="flex flex-col sm:flex-row gap-4 mt-3">
+                                <div className="flex-1 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={onGenerateAudio}
+                                            disabled={isGeneratingAudio || !!audioData}
+                                            className={`${primaryButtonClasses} w-full`}
+                                        >
+                                            <SpeakerWaveIcon className="h-5 w-5" />
+                                            {isGeneratingAudio ? 'Generating...' : audioData ? 'Voice Generated' : 'Generate Narration'}
                                         </button>
+                                        {isGeneratingAudio && (
+                                            <button onClick={onStopGeneration} title="Stop Generation" className={secondaryButtonClasses}>
+                                                <StopIcon className="h-5 w-5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {audioData && !isGeneratingAudio && (
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={handlePlayAudio} disabled={isPlaying} className={`${secondaryButtonClasses} w-full`}>
+                                                <PlayIcon className="h-5 w-5" />
+                                                {isPlaying ? 'Playing...' : 'Play Narration'}
+                                            </button>
+                                            <button onClick={handleDownloadAudio} title="Download Audio" className={secondaryButtonClasses}>
+                                                <DownloadIcon className="h-5 w-5" />
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
-                                {videoUrl && !isGeneratingVideo && (
+                                {isStoryTemplate && (
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => onGenerateVideo(aspectRatio, resolution)}
+                                                disabled={isGeneratingVideo || !!videoUrl}
+                                                className={`${primaryButtonClasses} w-full`}
+                                            >
+                                                <VideoCameraIcon className="h-5 w-5" />
+                                                {isGeneratingVideo ? 'Generating...' : videoUrl ? 'Video Generated' : 'Generate Video'}
+                                            </button>
+                                            {isGeneratingVideo && (
+                                                <button onClick={onStopGeneration} title="Stop Generation" className={secondaryButtonClasses}>
+                                                    <StopIcon className="h-5 w-5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label htmlFor="aspectRatio" className="text-xs text-gray-400">Aspect Ratio</label>
+                                                <select id="aspectRatio" value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} disabled={isGeneratingVideo} className="w-full bg-gray-700 border border-gray-600 rounded-md p-1 text-xs focus:ring-1 focus:ring-brand-primary focus:border-brand-primary">
+                                                    <option value="16:9">16:9 (Landscape)</option>
+                                                    <option value="9:16">9:16 (Portrait)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label htmlFor="resolution" className="text-xs text-gray-400">Resolution</label>
+                                                <select id="resolution" value={resolution} onChange={(e) => setResolution(e.target.value)} disabled={isGeneratingVideo} className="w-full bg-gray-700 border border-gray-600 rounded-md p-1 text-xs focus:ring-1 focus:ring-brand-primary focus:border-brand-primary">
+                                                    <option value="720p">720p</option>
+                                                    <option value="1080p">1080p</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                         <p className="text-xs text-gray-500 text-center pt-1">
+                                            Video generation requires API key selection.
+                                            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-400 ml-1">
+                                                See billing info
+                                            </a>.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {isStoryTemplate && isGeneratingVideo && (
+                                <div className="mt-4">
+                                    <div className="flex justify-between mb-1">
+                                        <span className="text-sm font-medium text-amber-400">Video Generation</span>
+                                        <span className="text-sm font-medium text-amber-400">{videoProgress}%</span>
+                                    </div>
+                                    <div className="w-full bg-amber-900/50 rounded-full h-2.5">
+                                        <div className="bg-amber-500 h-2.5 rounded-full" style={{ width: `${videoProgress}%`, transition: 'width 0.5s ease-in-out' }}></div>
+                                    </div>
+                                    <p className="text-xs text-center text-amber-300 mt-2">{videoGenerationStatus}</p>
+                                </div>
+                            )}
+                            {isStoryTemplate && error && isGeneratingVideo && (
+                                <div className="text-red-400 mt-4">
+                                    <p className="font-bold">An error occurred during video generation:</p>
+                                    <p>{error}</p>
+                                </div>
+                            )}
+                            {isStoryTemplate && videoUrl && !isGeneratingVideo && (
+                                <div className="mt-4 space-y-2">
                                      <a href={videoUrl} download="story-video.mp4" className={`${secondaryButtonClasses} w-full`}>
                                         <DownloadIcon className="h-5 w-5" />
                                         Download Video
                                     </a>
-                                )}
-                            </div>
-                         )}
-                    </div>
-
-                    {isStoryTemplate && isGeneratingVideo && (
-                        <div className="text-sm text-amber-400 p-2 bg-amber-900/50 rounded-md">
-                            <p className="font-semibold">Video Generation Status:</p>
-                            <p>{videoGenerationStatus}</p>
+                                    <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                                        <video src={videoUrl} controls className="w-full h-full"></video>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
-                     {isStoryTemplate && error && isGeneratingVideo && (
-                        <div className="text-red-400">
-                            <p className="font-bold">An error occurred during video generation:</p>
-                            <p>{error}</p>
-                        </div>
-                    )}
-                    {isStoryTemplate && videoUrl && (
-                        <div className="aspect-video bg-black rounded-lg mt-2 overflow-hidden">
-                            <video src={videoUrl} controls className="w-full h-full"></video>
-                        </div>
-                    )}
-                </div>
+                 </div>
             )}
         </section>
     );

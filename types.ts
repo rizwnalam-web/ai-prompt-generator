@@ -37,6 +37,11 @@ export interface ApiProviderConfig {
   model: string;
 }
 
+export interface User {
+  id: string;
+  email: string;
+}
+
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;

@@ -3,6 +3,7 @@ import ClipboardIcon from './icons/ClipboardIcon';
 import SparklesIcon from './icons/SparklesIcon';
 import CogIcon from './icons/CogIcon';
 import { ApiProviderConfig } from '../types';
+import ShareIcon from './icons/ShareIcon';
 
 interface GeneratedPromptProps {
     prompt: string;
@@ -10,15 +11,23 @@ interface GeneratedPromptProps {
     isLoading: boolean;
     activeConfig: ApiProviderConfig | null;
     onConfigureProvider: () => void;
+    onShare: () => void;
 }
 
-const GeneratedPrompt: React.FC<GeneratedPromptProps> = ({ prompt, onGenerate, isLoading, activeConfig, onConfigureProvider }) => {
+const GeneratedPrompt: React.FC<GeneratedPromptProps> = ({ prompt, onGenerate, isLoading, activeConfig, onConfigureProvider, onShare }) => {
     const [copied, setCopied] = useState(false);
+    const [shareCopied, setShareCopied] = useState(false);
 
     const handleCopy = () => {
         navigator.clipboard.writeText(prompt);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleShare = () => {
+        onShare();
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
     };
 
     const getProviderDisplayName = (provider: string) => {
@@ -60,16 +69,27 @@ const GeneratedPrompt: React.FC<GeneratedPromptProps> = ({ prompt, onGenerate, i
     };
 
     return (
-        <section className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 flex flex-col h-full">
+        <section data-tour-id="generated-prompt" className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-100">Generated Prompt</h2>
-                <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm transition-colors"
-                >
-                    <ClipboardIcon className="h-4 w-4" />
-                    {copied ? 'Copied!' : 'Copy'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleShare}
+                        className="flex items-center gap-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm transition-colors"
+                        aria-label="Share prompt"
+                    >
+                        <ShareIcon className="h-4 w-4" />
+                        {shareCopied ? 'Link Copied!' : 'Share'}
+                    </button>
+                    <button
+                        onClick={handleCopy}
+                        className="flex items-center gap-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-md text-sm transition-colors"
+                        aria-label="Copy prompt"
+                    >
+                        <ClipboardIcon className="h-4 w-4" />
+                        {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                </div>
             </div>
             <pre className="whitespace-pre-wrap text-gray-300 text-sm bg-gray-900/50 p-4 rounded-md flex-grow overflow-auto h-64 lg:h-auto">
                 {prompt}
