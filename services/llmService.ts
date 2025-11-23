@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { ApiProviderConfig } from '../types';
 
@@ -59,6 +60,44 @@ const generateWithOpenAICompatible = async (prompt: string, config: ApiProviderC
     }
 };
 
+const generateWithAnthropic = async (prompt: string, config: ApiProviderConfig): Promise<string> => {
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'x-api-key': config.apiKey,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+                'dangerously-allow-browser': 'true' // Required for client-side calls
+            },
+            body: JSON.stringify({
+                model: config.model,
+                max_tokens: 4096,
+                messages: [{ role: 'user', content: prompt }],
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+            throw new Error(errorData?.error?.message || `API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.content && Array.isArray(data.content) && data.content.length > 0) {
+             return data.content[0].text;
+        } else {
+            throw new Error("Invalid response structure from Anthropic API.");
+        }
+
+    } catch (error) {
+        console.error("Error calling Anthropic API:", error);
+        if (error instanceof Error) {
+            throw new Error(`Anthropic API Error: ${error.message}`);
+        }
+        throw new Error("An unknown error occurred while contacting the Anthropic API.");
+    }
+};
+
 export const generateResponse = async (prompt: string, config: ApiProviderConfig): Promise<string> => {
     if (config.provider !== 'gemini' && !config.apiKey) {
         throw new Error("API Key not set for the selected provider. Please configure it in the settings.");
@@ -70,10 +109,11 @@ export const generateResponse = async (prompt: string, config: ApiProviderConfig
         case 'openai':
             return generateWithOpenAICompatible(prompt, config, 'https://api.openai.com/v1/chat/completions');
         case 'grok':
-            // NOTE: This is a placeholder endpoint. The actual Grok API endpoint may differ.
             return generateWithOpenAICompatible(prompt, config, 'https://api.x.ai/v1/chat/completions');
         case 'deepseek':
             return generateWithOpenAICompatible(prompt, config, 'https://api.deepseek.com/v1/chat/completions');
+        case 'anthropic':
+            return generateWithAnthropic(prompt, config);
         default:
             throw new Error(`Unsupported provider: ${config.provider}`);
     }
@@ -114,6 +154,58 @@ export const generateSpeech = async (text: string, config: ApiProviderConfig, si
     }
 };
 
+export const generateImage = async (prompt: string, config: ApiProviderConfig, model: string = 'imagen-4.0-generate-001', aspectRatio: string = '16:9'): Promise<string> => {
+    if (config.provider !== 'gemini') {
+        throw new Error('Image generation is only supported for the Google Gemini provider.');
+    }
+
+    const ai = new GoogleGenAI({ apiKey: config.apiKey });
+    
+    try {
+        if (model.includes('imagen')) {
+            const response = await ai.models.generateImages({
+                model: model,
+                prompt: prompt,
+                config: {
+                    numberOfImages: 1,
+                    outputMimeType: 'image/jpeg',
+                    aspectRatio: aspectRatio,
+                },
+            });
+            const base64Image = response.generatedImages?.[0]?.image?.imageBytes;
+             if (!base64Image) throw new Error("No image data returned.");
+            return `data:image/jpeg;base64,${base64Image}`;
+        } else {
+            // Fallback for generic multimodal models (e.g., gemini-2.5-flash-image)
+            // Note: aspectRatio config is not supported here, so we prepend it to the prompt as a hint
+            const modifiedPrompt = `[Aspect Ratio: ${aspectRatio}] ${prompt}`;
+            
+            const response = await ai.models.generateContent({
+                model: model,
+                contents: {
+                    parts: [{ text: modifiedPrompt }],
+                },
+                config: {
+                    responseModalities: [Modality.IMAGE],
+                },
+            });
+            
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+                if (part.inlineData) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                }
+            }
+            throw new Error("No image data found in response.");
+        }
+    } catch (error) {
+        console.error("Error calling Image API:", error);
+        if (error instanceof Error) {
+            throw new Error(`Image API Error: ${error.message}`);
+        }
+        throw new Error("An unknown error occurred while contacting the Image API.");
+    }
+};
+
 export const generateVideo = async (
     prompt: string,
     config: ApiProviderConfig,
@@ -121,6 +213,7 @@ export const generateVideo = async (
     signal?: AbortSignal,
     aspectRatio: string = '16:9',
     resolution: string = '720p',
+    modelName: string = 'veo-3.1-fast-generate-preview',
 ): Promise<string> => {
     if (config.provider !== 'gemini') {
         throw new Error('Video generation is only supported for the Google Gemini provider.');
@@ -129,13 +222,15 @@ export const generateVideo = async (
     if (signal?.aborted) throw new DOMException('Aborted by user', 'AbortError');
 
     // Per Veo documentation, a new client must be created to use the key from the selection dialog.
+    // Note: The actual key is injected by the platform into process.env.API_KEY when running in the specific AI Studio environment.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
         onStatusUpdate('Initializing video generation...');
+        // Use prompt directly without hardcoded prefix for more flexibility
         let operation = await ai.models.generateVideos({
-            model: 'veo-3.1-fast-generate-preview',
-            prompt: `An animated, whimsical short film based on this story: ${prompt}`,
+            model: modelName,
+            prompt: prompt.substring(0, 800), // Truncate to reasonable length if long
             config: {
                 numberOfVideos: 1,
                 resolution: resolution as ('720p' | '1080p'),
@@ -176,7 +271,7 @@ export const generateVideo = async (
         if ((error as Error).name !== 'AbortError') {
             onStatusUpdate('An error occurred during video generation.');
             if (error instanceof Error) {
-                 if (error.message.includes("Requested entity was not found")) {
+                 if (error.message.includes("Requested entity was not found") || error.message.includes("API Key is invalid or not found")) {
                      throw new Error("Video API Error: API Key is invalid or not found. Please try re-selecting your key.");
                 }
                 throw new Error(`Video API Error: ${error.message}`);

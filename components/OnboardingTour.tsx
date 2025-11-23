@@ -95,29 +95,31 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ isOpen, onClose }) => {
     const isFirstStep = currentStep === 0;
     const isLastStep = currentStep === tourSteps.length - 1;
 
-    const tooltipStyle: React.CSSProperties = targetRect ? {
-        top: targetRect.bottom + 10,
-        left: targetRect.left,
-        maxWidth: 320,
-        position: 'fixed',
-    } : {
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        position: 'fixed',
-    };
-    
-    // Adjust tooltip if it overflows the viewport
+    let tooltipStyle: React.CSSProperties;
+
     if (targetRect) {
+        tooltipStyle = {
+            top: targetRect.bottom + 10,
+            left: targetRect.left,
+            maxWidth: 320,
+            position: 'fixed',
+        };
+        
+        // Adjust tooltip if it overflows the viewport
         const viewportWidth = window.innerWidth;
         if (targetRect.left + 320 > viewportWidth) {
-            tooltipStyle.left = undefined;
-            tooltipStyle.right = 16;
+            tooltipStyle = { ...tooltipStyle, left: undefined, right: 16 };
         }
         if (targetRect.bottom + 200 > window.innerHeight) {
-            tooltipStyle.top = undefined;
-            tooltipStyle.bottom = window.innerHeight - targetRect.top + 10;
+            tooltipStyle = { ...tooltipStyle, top: undefined, bottom: window.innerHeight - targetRect.top + 10 };
         }
+    } else {
+        tooltipStyle = {
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            position: 'fixed',
+        };
     }
 
 

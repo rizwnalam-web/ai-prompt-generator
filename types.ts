@@ -1,3 +1,4 @@
+
 export interface TemplateVariable {
   key: string;
   label: string;
@@ -27,7 +28,7 @@ export interface PromptInputs {
     [key:string]: string; // For dynamic variables
 }
 
-export type ApiProviderType = 'gemini' | 'openai' | 'grok' | 'deepseek';
+export type ApiProviderType = 'gemini' | 'openai' | 'grok' | 'deepseek' | 'anthropic';
 
 export interface ApiProviderConfig {
   id: string;

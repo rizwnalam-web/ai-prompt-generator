@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ApiProviderConfig, ApiProviderType } from '../types';
 import TrashIcon from './icons/TrashIcon';
@@ -18,8 +19,40 @@ interface ProviderManagerModalProps {
 const PROVIDER_INFO: Record<ApiProviderType, { name: string, defaultModel: string, url: string }> = {
     gemini: { name: 'Google Gemini', defaultModel: 'gemini-2.5-flash', url: 'https://aistudio.google.com/app/apikey' },
     openai: { name: 'OpenAI', defaultModel: 'gpt-4-turbo', url: 'https://platform.openai.com/api-keys' },
-    grok: { name: 'Grok', defaultModel: 'grok-1', url: 'https://x.ai/' },
-    deepseek: { name: 'DeepSeek', defaultModel: 'deepseek-chat', url: 'https://platform.deepseek.com/api_keys' }
+    grok: { name: 'Grok', defaultModel: 'grok-2', url: 'https://x.ai/' },
+    deepseek: { name: 'DeepSeek', defaultModel: 'deepseek-chat', url: 'https://platform.deepseek.com/api_keys' },
+    anthropic: { name: 'Anthropic (Claude)', defaultModel: 'claude-3-5-sonnet-20240620', url: 'https://console.anthropic.com/settings/keys' }
+};
+
+const RECOMMENDED_MODELS: Record<ApiProviderType, { value: string; label: string }[]> = {
+    gemini: [
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Fast & Balanced)' },
+        { value: 'gemini-3-pro-preview', label: 'Gemini 3.0 Pro (Best for Coding & Reasoning)' },
+        { value: 'gemini-2.0-pro-exp-02-05', label: 'Gemini 2.0 Pro Exp (Complex Tasks)' },
+        { value: 'gemini-2.5-flash-thinking', label: 'Gemini 2.5 Flash Thinking (Enhanced Reasoning)' },
+        { value: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite (Cost Effective)' },
+    ],
+    openai: [
+        { value: 'gpt-4.5-preview', label: 'GPT-4.5 Preview (New Flagship)' },
+        { value: 'gpt-4o', label: 'GPT-4o (Fast & Intelligent)' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+        { value: 'o1-preview', label: 'o1 Preview (Advanced Reasoning)' },
+        { value: 'o1-mini', label: 'o1 Mini (Fast Reasoning)' },
+        { value: 'o3-mini', label: 'o3 Mini (Latest Reasoning)' },
+    ],
+    grok: [
+        { value: 'grok-2', label: 'Grok-2' },
+        { value: 'grok-1', label: 'Grok-1' },
+    ],
+    deepseek: [
+        { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
+        { value: 'deepseek-reasoner', label: 'DeepSeek R1 (Reasoning & Coding)' },
+    ],
+    anthropic: [
+        { value: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' },
+        { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+        { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
+    ]
 };
 
 const validateApiKey = (key: string, provider: ApiProviderType): string | null => {
@@ -34,11 +67,15 @@ const validateApiKey = (key: string, provider: ApiProviderType): string | null =
         },
         openai: {
             regex: /^sk-(proj-)?[A-Za-z0-9]{40,}$/,
-            message: 'Invalid OpenAI API key format. It should start with "sk-" and be at least 43 characters long.'
+            message: 'Invalid OpenAI API key format. It should start with "sk-".'
         },
         deepseek: {
              regex: /^sk-[a-zA-Z0-9]{32,}$/,
              message: 'Invalid DeepSeek API key format. It should start with "sk-".'
+        },
+        anthropic: {
+            regex: /^sk-ant-[a-zA-Z0-9_-]{80,}$/,
+            message: 'Invalid Anthropic API key format. It should start with "sk-ant-".'
         }
     };
 
@@ -47,7 +84,7 @@ const validateApiKey = (key: string, provider: ApiProviderType): string | null =
         return validation.message;
     }
 
-    if (!validation && (key.length < 20 || /\s/.test(key))) {
+    if (!validation && (key.length < 10 || /\s/.test(key))) {
         return "API key seems too short or contains whitespace.";
     }
 
@@ -85,6 +122,10 @@ const ProviderForm: React.FC<{
         setProvider(newProvider);
         setModel(PROVIDER_INFO[newProvider].defaultModel);
         setApiKeyError(null);
+        // Clear API key if switching providers as format likely differs
+        if (!existingConfig || existingConfig.provider !== newProvider) {
+            setApiKey('');
+        }
     };
 
     const handleApiKeyChange = (value: string) => {
@@ -122,6 +163,7 @@ const ProviderForm: React.FC<{
 
     const commonInputClasses = "w-full bg-gray-900 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary";
     const providerData = PROVIDER_INFO[provider];
+    const recommendations = RECOMMENDED_MODELS[provider] || [];
 
     return (
         <form onSubmit={handleSubmit} className="p-6 space-y-4 flex-grow overflow-y-auto">
@@ -135,7 +177,7 @@ const ProviderForm: React.FC<{
             </div>
             <div>
                 <label htmlFor="config-name" className="block text-sm font-medium mb-1 text-gray-300">Configuration Name</label>
-                <input id="config-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., My Personal GPT-4 Key" className={commonInputClasses} required />
+                <input id="config-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., My Personal Key" className={commonInputClasses} required />
             </div>
             <div>
                 <label htmlFor="api-key" className="block text-sm font-medium mb-1 text-gray-300">API Key</label>
@@ -159,7 +201,24 @@ const ProviderForm: React.FC<{
             </div>
             <div>
                 <label htmlFor="model-name" className="block text-sm font-medium mb-1 text-gray-300">Model Name</label>
-                <input id="model-name" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="e.g., gpt-4-turbo" className={commonInputClasses} required />
+                <input 
+                    id="model-name" 
+                    type="text" 
+                    list="recommended-models"
+                    value={model} 
+                    onChange={e => setModel(e.target.value)} 
+                    placeholder="e.g., gemini-3-pro-preview" 
+                    className={commonInputClasses} 
+                    required 
+                />
+                <datalist id="recommended-models">
+                    {recommendations.map(rec => (
+                         <option key={rec.value} value={rec.value}>{rec.label}</option>
+                    ))}
+                </datalist>
+                <p className="text-xs text-gray-400 mt-1">
+                    Select a recommended model or type a custom model ID.
+                </p>
             </div>
             <div className="flex justify-end gap-4 pt-4">
                 <button type="button" onClick={onCancel} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors">Cancel</button>
@@ -177,7 +236,6 @@ const ApiKeyModal: React.FC<ProviderManagerModalProps> = ({ isOpen, onClose, onS
 
     useEffect(() => {
         if (isOpen) {
-            // If there's an error, jump to editing that config
            if (apiKeyError) {
                const configToEdit = configs.find(c => c.id === apiKeyError.configId);
                if (configToEdit) {

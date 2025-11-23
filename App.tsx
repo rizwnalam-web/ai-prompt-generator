@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PromptTemplate, PromptInputs, ApiProviderConfig } from './types';
 import { PROMPT_TEMPLATES, TONE_OPTIONS, STYLE_OPTIONS, FORMAT_OPTIONS } from './constants';
-import { generateResponse, generateSpeech, generateVideo } from './services/llmService';
+import { generateResponse, generateSpeech, generateVideo, generateImage } from './services/llmService';
 import { getCustomTemplates, saveCustomTemplates, getGuestTemplates, saveGuestTemplates, clearGuestTemplates } from './services/templateService';
 import { getConfigs, saveConfigs, getGuestConfigs, saveGuestConfigs, clearGuestConfigs } from './services/apiConfigService';
 import { hasCompletedTour, markTourAsCompleted, resetTour } from './services/onboardingService';
@@ -40,8 +41,10 @@ const App: React.FC = () => {
     // Multimodal state
     const [audioData, setAudioData] = useState<string | null>(null);
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
     const [isGeneratingVideo, setIsGeneratingVideo] = useState<boolean>(false);
+    const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
     const [videoGenerationStatus, setVideoGenerationStatus] = useState<string>('');
     const [generationAbortController, setGenerationAbortController] = useState<AbortController | null>(null);
 
@@ -202,6 +205,7 @@ const App: React.FC = () => {
         setAiResponse('');
         setAudioData(null);
         setVideoUrl(null);
+        setImageUrl(null);
         setVideoGenerationStatus('');
         setFeedback(null); // Reset feedback for new response
 
@@ -244,7 +248,28 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGenerateVideo = async (aspectRatio: string, resolution: string) => {
+    const handleGenerateImage = async (modelName: string, aspectRatio: string) => {
+        if (!aiResponse || !activeConfig) return;
+
+        setIsGeneratingImage(true);
+        setError(null);
+        setImageUrl(null);
+
+        try {
+            // For image generation we use the response as the context/prompt
+            // Extract visual descriptions if possible, or just use the text
+            const imagePrompt = aiResponse.length > 500 ? "Create an image representing this content: " + aiResponse.substring(0, 500) : aiResponse;
+            
+            const url = await generateImage(imagePrompt, activeConfig, modelName, aspectRatio);
+            setImageUrl(url);
+        } catch (err) {
+             setError(err instanceof Error ? err.message : 'Failed to generate image.');
+        } finally {
+            setIsGeneratingImage(false);
+        }
+    }
+
+    const handleGenerateVideo = async (aspectRatio: string, resolution: string, modelName: string) => {
         if (!aiResponse || !activeConfig) return;
 
         if (!window.aistudio || typeof window.aistudio.hasSelectedApiKey !== 'function') {
@@ -266,7 +291,7 @@ const App: React.FC = () => {
             setError(null);
             setVideoUrl(null);
 
-            const url = await generateVideo(aiResponse, activeConfig, setVideoGenerationStatus, controller.signal, aspectRatio, resolution);
+            const url = await generateVideo(aiResponse, activeConfig, setVideoGenerationStatus, controller.signal, aspectRatio, resolution, modelName);
             setVideoUrl(url);
         } catch (err) {
              if ((err as Error).name !== 'AbortError') {
@@ -493,11 +518,14 @@ const App: React.FC = () => {
                             error={error}
                             isStoryTemplate={selectedTemplate.id === 'story-generator'}
                             onGenerateAudio={handleGenerateAudio}
+                            onGenerateImage={handleGenerateImage}
                             onGenerateVideo={handleGenerateVideo}
                             onStopGeneration={handleStopGeneration}
                             audioData={audioData}
+                            imageUrl={imageUrl}
                             videoUrl={videoUrl}
                             isGeneratingAudio={isGeneratingAudio}
+                            isGeneratingImage={isGeneratingImage}
                             isGeneratingVideo={isGeneratingVideo}
                             videoGenerationStatus={videoGenerationStatus}
                             activeConfig={activeConfig}
